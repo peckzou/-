@@ -44,6 +44,92 @@ class BadgeAudioEngine {
     } catch {}
   }
 
+  // Strike milestone automatic unlock ceremony (fiery fanfare + ascending glockenspiel)
+  playStrikeUnlockFlourish() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const notes = [440, 554.37, 659.25, 880, 1108.73, 1318.51, 1760]; // A Major triumph
+      notes.forEach((freq, idx) => {
+        if (!this.ctx) return;
+        const noteStart = t + idx * 0.05;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, noteStart);
+        gain.gain.setValueAtTime(0.001, noteStart);
+        gain.gain.linearRampToValueAtTime(0.12, noteStart + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.85);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(noteStart);
+        osc.stop(noteStart + 0.9);
+      });
+
+      const sub = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(80, t);
+      sub.frequency.exponentialRampToValueAtTime(38, t + 0.65);
+      subGain.gain.setValueAtTime(0.18, t);
+      subGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      sub.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      sub.start(t);
+      sub.stop(t + 0.72);
+    } catch {}
+  }
+
+  // Strike day check-in +1 audio tick with progressive pitch
+  playStrikeDayCheckin(dayIndex = 1) {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const baseFreq = 523.25 * Math.pow(1.059463, (dayIndex % 12));
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(baseFreq, t);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, t + 0.06);
+      gain.gain.setValueAtTime(0.12, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    } catch {}
+  }
+
+  // Curved 3D trajectory flight whoosh
+  playStrikeFlightWhoosh() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(240, t);
+      osc.frequency.exponentialRampToValueAtTime(680, t + 0.35);
+      osc.frequency.exponentialRampToValueAtTime(180, t + 0.7);
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(600, t);
+      filter.frequency.linearRampToValueAtTime(1800, t + 0.35);
+      filter.frequency.exponentialRampToValueAtTime(300, t + 0.7);
+      gain.gain.setValueAtTime(0.01, t);
+      gain.gain.linearRampToValueAtTime(0.14, t + 0.35);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.72);
+    } catch {}
+  }
+
   // Metallic tick for bracket dock or rotation click
   playClick(pitch = 1.0) {
     try {

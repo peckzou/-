@@ -8,6 +8,7 @@ import { HexAssemblyRevealView } from './components/HexAssemblyRevealView';
 import { PendingBadgeView } from './components/PendingBadgeView';
 import { BadgeWallReturnCeremonyView } from './components/BadgeWallReturnCeremonyView';
 import { UnifiedAwardCeremonyFlowView } from './components/UnifiedAwardCeremonyFlowView';
+import { StrikeCelebrationFlowView } from './components/StrikeCelebrationFlowView';
 import { OptimizationReportModal } from './components/OptimizationReportModal';
 import { GitHubPackageExportModal } from './components/GitHubPackageExportModal';
 import {
@@ -23,12 +24,13 @@ import {
   Award,
   ArrowRight,
   Package,
+  Crown,
 } from 'lucide-react';
 
-type AnimationTab = 'unified' | 'badgewall' | 'pending' | 'reveal' | 'watchos4' | 'rings';
+type AnimationTab = 'strike' | 'unified' | 'badgewall' | 'pending' | 'reveal' | 'watchos4' | 'rings';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<AnimationTab>('unified');
+  const [activeTab, setActiveTab] = useState<AnimationTab>('strike');
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -44,6 +46,14 @@ export default function App() {
     icon: React.ReactNode;
     color: string;
   }[] = [
+    {
+      id: 'strike',
+      label: 'Strike 连击成就与勋章墙 (Streak)',
+      sublabel: '3天/7天自动解锁 · 悬浮待领取 · 10个 Strike 灰色阴影卡槽 · 抛物线磁吸入墙',
+      tag: '🔥 10个阴影卡槽 · Strike 墙',
+      icon: <Flame className="w-4 h-4 text-orange-400" />,
+      color: 'from-orange-500 via-amber-400 to-yellow-500',
+    },
     {
       id: 'unified',
       label: 'Apple 勋章 3 合 1 全流程连续仪式 (Unified)',
@@ -162,7 +172,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Core Modules Switcher Banner */}
         <div className="bg-[#121620]/95 border border-white/10 rounded-2xl p-2 sm:p-2.5 shadow-2xl">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
             {tabList.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -295,6 +305,13 @@ export default function App() {
 
         {/* Active Stage */}
         <div className="transition-all duration-300">
+          {activeTab === 'strike' && (
+            <StrikeCelebrationFlowView
+              onMetricsUpdate={setMetrics}
+              sharedMaterials={sharedMaterials}
+            />
+          )}
+
           {activeTab === 'unified' && (
             <UnifiedAwardCeremonyFlowView
               onMetricsUpdate={setMetrics}

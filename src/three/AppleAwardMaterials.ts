@@ -53,6 +53,11 @@ export class AppleAwardMaterials {
   public pendingLiquidGlass: THREE.MeshPhysicalMaterial;
   public pendingMicroHairline: THREE.MeshStandardMaterial;
 
+  // 3D Gray Shadow Slot Materials (灰色阴影卡槽材质)
+  public shadowEnamel: THREE.MeshStandardMaterial;
+  public shadowRelief: THREE.MeshStandardMaterial;
+  public shadowBezel: THREE.MeshStandardMaterial;
+
   // Dynamic Fresnel State
   public fresnelIntensity = 1.0;
   public fresnelPower = 3.2;
@@ -353,6 +358,29 @@ export class AppleAwardMaterials {
       metalness: 0.85,
       envMap: this.envMap,
       envMapIntensity: 0.7,
+    });
+
+    // 18. 3D Gray Shadow Slot Materials (灰色阴影卡槽材质)
+    this.shadowEnamel = new THREE.MeshStandardMaterial({
+      color: 0x0d1017,
+      roughness: 0.94,
+      metalness: 0.12,
+      envMap: this.envMap,
+      envMapIntensity: 0.25,
+    });
+    this.shadowRelief = new THREE.MeshStandardMaterial({
+      color: 0x18202d,
+      roughness: 0.82,
+      metalness: 0.28,
+      envMap: this.envMap,
+      envMapIntensity: 0.35,
+    });
+    this.shadowBezel = new THREE.MeshStandardMaterial({
+      color: 0x222a38,
+      roughness: 0.65,
+      metalness: 0.42,
+      envMap: this.envMap,
+      envMapIntensity: 0.45,
     });
   }
 
