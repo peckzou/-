@@ -27,7 +27,10 @@ export type StrikeSpatialState =
   | 'flying_to_wall'    // 抛物线轨迹自转飞回 Strike Badge Wall 对应槽位
   | 'magnetic_snap'     // 磁吸吸附弹跳归位 (Spring Overshoot 物理震动)
   | 'wall_overview'     // Strike 勋章墙全景浏览
-  | 'inspect_badge';    // 墙上选中的勋章调出至中央 3D 赏玩与 180° 翻面
+  | 'inspect_badge'     // 墙上选中的勋章调出至中央 3D 赏玩与 180° 翻面
+  | 'unlock_ceremony';  // Strike 专属勋章沉浸式多阶段解锁仪式 (Ignition -> Molten -> Levitate)
+
+export type StrikeCeremonyPhase = 'idle' | 'igniting' | 'molten_burst' | 'hero_levitate' | 'complete';
 
 export interface StrikeWallSlot {
   index: number;
@@ -157,6 +160,29 @@ export class OptimizedStrikeBadgeScene {
   private fireworksLifetimes!: Float32Array;
   private fireworksMaxLifetimes!: Float32Array;
   private readonly MAX_FIREWORKS = 900;
+
+  // ── Strike Unlock Ceremony Flame Vortex System (烈焰旋涡聚能粒子) ──
+  private vortexPoints!: THREE.Points;
+  private vortexPositions!: Float32Array;
+  private vortexColors!: Float32Array;
+  private vortexAngles!: Float32Array;
+  private vortexRadii!: Float32Array;
+  private vortexHeights!: Float32Array;
+  private vortexSpeeds!: Float32Array;
+  private readonly MAX_VORTEX = 450;
+
+  // ── Strike Unlock Shockwave Ring (冲击波扩散光环) ──
+  private shockwaveMesh!: THREE.Mesh;
+  private shockwaveStartTime = 0;
+  private shockwaveDuration = 900;
+
+  // ── Dedicated Ceremony Orchestrator State ──
+  public isCeremonyActive = false;
+  public ceremonyPhase: StrikeCeremonyPhase = 'idle';
+  public onCeremonyPhaseChange?: (phase: StrikeCeremonyPhase, progress: number) => void;
+  public onCeremonyComplete?: (badge: StrikeBadgeItem) => void;
+  private ceremonyStartTime = 0;
+  private ceremonyTargetSlotIndex = 0;
 
   // Spatial State
   public currentState: StrikeSpatialState = 'pending_float';
@@ -303,6 +329,10 @@ export class OptimizedStrikeBadgeScene {
 
     // 7.8 Build Celebration Fireworks Particle System (局域烟花爆破)
     this.buildFireworksSystem();
+
+    // 7.9 Build Strike Unlock Ceremony Flame Vortex & Shockwave Ring
+    this.buildVortexSystem();
+    this.buildShockwaveMesh();
 
     // 8. Load Initial Floating Badge (3-Day by default)
     this.loadPendingBadge(STRIKE_BADGE_CATALOG[0]);
@@ -1069,6 +1099,205 @@ export class OptimizedStrikeBadgeScene {
   }
 
   /**
+   * Build Flame Vortex Particle System (烈焰旋涡聚能粒子) for Strike Unlock Ceremony
+   */
+  private buildVortexSystem() {
+    this.vortexPositions = new Float32Array(this.MAX_VORTEX * 3);
+    this.vortexColors = new Float32Array(this.MAX_VORTEX * 3);
+    this.vortexAngles = new Float32Array(this.MAX_VORTEX);
+    this.vortexRadii = new Float32Array(this.MAX_VORTEX);
+    this.vortexHeights = new Float32Array(this.MAX_VORTEX);
+    this.vortexSpeeds = new Float32Array(this.MAX_VORTEX);
+
+    for (let i = 0; i < this.MAX_VORTEX; i++) {
+      this.vortexPositions[i * 3 + 2] = -9999;
+      this.vortexAngles[i] = Math.random() * Math.PI * 2;
+      this.vortexRadii[i] = 0.8 + Math.random() * 2.2;
+      this.vortexHeights[i] = (Math.random() - 0.5) * 1.5;
+      this.vortexSpeeds[i] = 3.5 + Math.random() * 5.0;
+
+      // Warm fiery colors: orange, gold, crimson
+      const rnd = Math.random();
+      if (rnd < 0.45) {
+        this.vortexColors[i * 3] = 1.0;
+        this.vortexColors[i * 3 + 1] = 0.84;
+        this.vortexColors[i * 3 + 2] = 0.04;
+      } else if (rnd < 0.8) {
+        this.vortexColors[i * 3] = 1.0;
+        this.vortexColors[i * 3 + 1] = 0.35;
+        this.vortexColors[i * 3 + 2] = 0.0;
+      } else {
+        this.vortexColors[i * 3] = 1.0;
+        this.vortexColors[i * 3 + 1] = 0.15;
+        this.vortexColors[i * 3 + 2] = 0.3;
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.vortexPositions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(this.vortexColors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.085,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    this.vortexPoints = new THREE.Points(geo, mat);
+    this.vortexPoints.name = 'ceremony-vortex';
+    this.vortexPoints.frustumCulled = false;
+    this.vortexPoints.visible = false;
+    this.scene.add(this.vortexPoints);
+  }
+
+  /**
+   * Build Luminous Shockwave Ring (冲击波扩散光环)
+   */
+  private buildShockwaveMesh() {
+    const shockGeo = new THREE.RingGeometry(0.85, 1.08, 64);
+    const shockMat = new THREE.MeshBasicMaterial({
+      color: 0xffd60a,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    this.shockwaveMesh = new THREE.Mesh(shockGeo, shockMat);
+    this.shockwaveMesh.name = 'ceremony-shockwave';
+    this.shockwaveMesh.visible = false;
+    this.scene.add(this.shockwaveMesh);
+  }
+
+  /**
+   * Trigger expanding shockwave from origin
+   */
+  public triggerShockwave(origin: THREE.Vector3, colorHex = 0xffd60a) {
+    if (!this.shockwaveMesh) return;
+    this.shockwaveMesh.position.copy(origin);
+    this.shockwaveMesh.scale.setScalar(0.1);
+    (this.shockwaveMesh.material as THREE.MeshBasicMaterial).color.setHex(colorHex);
+    (this.shockwaveMesh.material as THREE.MeshBasicMaterial).opacity = 0.95;
+    this.shockwaveMesh.visible = true;
+    this.shockwaveStartTime = performance.now();
+  }
+
+  /**
+   * Update shockwave ring expansion & fade
+   */
+  private updateShockwave(now: number) {
+    if (!this.shockwaveMesh || !this.shockwaveMesh.visible) return;
+    const elapsed = now - this.shockwaveStartTime;
+    const progress = Math.min(1.0, elapsed / this.shockwaveDuration);
+
+    if (progress >= 1.0) {
+      this.shockwaveMesh.visible = false;
+      return;
+    }
+
+    const ease = Math.sin((progress * Math.PI) / 2);
+    const scale = 0.1 + ease * 3.6;
+    this.shockwaveMesh.scale.setScalar(scale);
+    (this.shockwaveMesh.material as THREE.MeshBasicMaterial).opacity = (1.0 - progress) * 0.92;
+  }
+
+  /**
+   * Update flame vortex convergence in ignition phase
+   */
+  private updateVortex(dt: number, now: number, progress: number, targetPos: THREE.Vector3) {
+    if (!this.vortexPoints) return;
+    this.vortexPoints.visible = true;
+
+    // Radius shrinks as ignition progresses (from 2.2 down to 0.05)
+    const radiusFactor = Math.max(0.02, 1.0 - Math.pow(progress, 1.5));
+
+    for (let i = 0; i < this.MAX_VORTEX; i++) {
+      this.vortexAngles[i] += this.vortexSpeeds[i] * dt * (1.0 + progress * 2.5);
+      const angle = this.vortexAngles[i];
+      const r = this.vortexRadii[i] * radiusFactor;
+      const h = this.vortexHeights[i] * radiusFactor;
+
+      // Spiral inwards toward target slot
+      this.vortexPositions[i * 3] = targetPos.x + Math.cos(angle) * r;
+      this.vortexPositions[i * 3 + 1] = targetPos.y + Math.sin(angle) * r * 0.75 + h;
+      this.vortexPositions[i * 3 + 2] = targetPos.z + Math.sin(angle * 2.0) * 0.15 + (1.0 - progress) * 0.3;
+
+      // Color intensifies to white-gold near convergence
+      const heat = Math.min(1.0, progress * 1.5);
+      this.vortexColors[i * 3] = 1.0;
+      this.vortexColors[i * 3 + 1] = 0.4 + heat * 0.55;
+      this.vortexColors[i * 3 + 2] = heat * 0.35;
+    }
+
+    (this.vortexPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (this.vortexPoints.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  /**
+   * Start High-Fidelity Strike Badge Multi-Stage Unlock Ceremony
+   * Choreography:
+   * 1. 🌋 初燃聚能 (Ignition & Flame Vortex) -> 0 ~ 1300ms
+   * 2. 💥 熔金破茧 (Molten Burst, Shockwave & Tiered Fireworks) -> 1300 ~ 2300ms
+   * 3. ✨ 浮空巡礼 (Hero Levitation & 3D 360° Inspection Orbit) -> 2300 ~ 4500ms
+   * 4. 🏁 达成入列 (Ready for interactive exploration or parabolic snap)
+   */
+  public startStrikeUnlockCeremony(
+    badge: StrikeBadgeItem,
+    onPhaseChange?: (phase: StrikeCeremonyPhase, progress: number) => void,
+    onComplete?: (badge: StrikeBadgeItem) => void
+  ) {
+    this.isCeremonyActive = true;
+    this.ceremonyPhase = 'igniting';
+    this.ceremonyStartTime = performance.now();
+    this.activeStrikeBadge = badge;
+    this.currentState = 'unlock_ceremony';
+
+    if (onPhaseChange) this.onCeremonyPhaseChange = onPhaseChange;
+    if (onComplete) this.onCeremonyComplete = onComplete;
+
+    const slotIdx = this.slots.findIndex((s) => s.badge.id === badge.id);
+    this.ceremonyTargetSlotIndex = slotIdx !== -1 ? slotIdx : 0;
+    this.activeSlotIndex = this.ceremonyTargetSlotIndex;
+
+    const targetSlot = this.slots[this.ceremonyTargetSlotIndex];
+
+    // Reset pending mesh in center during initial ignition
+    if (this.pendingBadgeMesh) {
+      this.centerGroup.remove(this.pendingBadgeMesh);
+      this.pendingBadgeMesh = null;
+    }
+
+    // Audio & Haptics for Ignition
+    if (this.soundEnabled) {
+      badgeAudio.playStrikeIgnitionSound();
+    }
+    triggerHaptic('impact');
+
+    if (this.onCeremonyPhaseChange) {
+      this.onCeremonyPhaseChange('igniting', 0.0);
+    }
+    if (this.onStateChange) {
+      this.onStateChange('unlock_ceremony', badge);
+    }
+  }
+
+  /**
+   * Cancel ongoing ceremony and restore default overview
+   */
+  public cancelCeremony() {
+    this.isCeremonyActive = false;
+    this.ceremonyPhase = 'idle';
+    if (this.vortexPoints) this.vortexPoints.visible = false;
+    if (this.shockwaveMesh) this.shockwaveMesh.visible = false;
+    this.camera.position.set(0, 0, 7.2);
+    this.loadPendingBadge(this.activeStrikeBadge);
+  }
+
+  /**
    * Load Floating Pending Strike Badge (3D Mesh in Center Showcase)
    */
   public loadPendingBadge(badgeItem: StrikeBadgeItem) {
@@ -1219,6 +1448,9 @@ export class OptimizedStrikeBadgeScene {
     // Illuminate socket halo
     (targetSlot.haloMesh.material as THREE.MeshBasicMaterial).opacity = 0.8;
     (targetSlot.haloMesh.material as THREE.MeshBasicMaterial).color.set(this.activeStrikeBadge.accentHex);
+
+    // Trigger celebratory localized color-graded fireworks burst on this slot
+    this.triggerWallFireworks(targetSlot.index, 360, this.activeStrikeBadge.strikeDays);
 
     // Remove pending mesh from center
     this.centerGroup.remove(this.pendingBadgeMesh);
@@ -1646,11 +1878,170 @@ export class OptimizedStrikeBadgeScene {
       this.pendingBadgeMesh.quaternion.copy(this.currentQuat);
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    // State 5: Strike Multi-Stage Unlock Ceremony (专属解锁动画多阶段管线)
+    // ───────────────────────────────────────────────────────────────────────
+    else if (this.currentState === 'unlock_ceremony' && this.isCeremonyActive) {
+      const ceremonyElapsed = (now - this.ceremonyStartTime) * this.playbackSpeed;
+      const targetSlot = this.slots[this.ceremonyTargetSlotIndex] || this.slots[0];
+      const slotPos = new THREE.Vector3(targetSlot.x, targetSlot.y, targetSlot.z);
+
+      // Phase 1: 🌋 初燃聚能 (Ignition & Flame Vortex) -> 0 ~ 1300ms
+      if (ceremonyElapsed < 1300) {
+        this.ceremonyPhase = 'igniting';
+        const p = Math.min(1.0, ceremonyElapsed / 1300);
+
+        // Update vortex inward spiraling
+        this.updateVortex(dt, now, p, slotPos);
+
+        // Lift slot slightly forward and pulse molten rim
+        targetSlot.liftTarget = 0.28 * p;
+        if (targetSlot.socketRimMesh && targetSlot.socketRimMesh.material) {
+          const rimMat = targetSlot.socketRimMesh.material as THREE.MeshStandardMaterial;
+          if (rimMat.emissive) {
+            rimMat.emissive.setHex(0xff3700);
+            rimMat.emissiveIntensity = 0.5 + Math.sin(now * 0.01) * 0.4 + p * 0.8;
+          }
+        }
+        if (targetSlot.haloMesh && targetSlot.haloMesh.material) {
+          (targetSlot.haloMesh.material as THREE.MeshBasicMaterial).opacity = 0.2 + p * 0.6;
+          (targetSlot.haloMesh.material as THREE.MeshBasicMaterial).color.setHex(0xff5500);
+        }
+
+        // Camera eases in slightly towards the slot
+        const targetCamX = slotPos.x * 0.25;
+        const targetCamY = slotPos.y * 0.25;
+        this.camera.position.x += (targetCamX - this.camera.position.x) * dt * 3.0;
+        this.camera.position.y += (targetCamY - this.camera.position.y) * dt * 3.0;
+        this.camera.position.z += (5.6 - this.camera.position.z) * dt * 3.0;
+
+        if (this.onCeremonyPhaseChange) {
+          this.onCeremonyPhaseChange('igniting', p);
+        }
+      }
+      // Phase 2: 💥 熔金破茧 (Molten Burst & Shockwave Explosion) -> 1300 ~ 2300ms
+      else if (ceremonyElapsed < 2300) {
+        const p = Math.min(1.0, (ceremonyElapsed - 1300) / 1000);
+        if (this.ceremonyPhase === 'igniting') {
+          this.ceremonyPhase = 'molten_burst';
+
+          // Turn on unlocked slot badge
+          targetSlot.isUnlocked = true;
+          if (targetSlot.shadowBadgeMesh) {
+            targetSlot.slotGroup.remove(targetSlot.shadowBadgeMesh);
+            targetSlot.shadowBadgeMesh = null;
+          }
+          if (!targetSlot.badgeMesh) {
+            const slotBadge = buildAppleBadge3D(this.mats, this.activeStrikeBadge);
+            slotBadge.scale.setScalar(0.44);
+            slotBadge.position.set(0, 0, 0.02);
+            targetSlot.slotGroup.add(slotBadge);
+            targetSlot.badgeMesh = slotBadge;
+          }
+
+          // Trigger shockwave & localized color-graded fireworks
+          const accentColor = parseInt(this.activeStrikeBadge.accentHex.replace('#', '0x')) || 0xffd60a;
+          this.triggerShockwave(new THREE.Vector3(targetSlot.x, targetSlot.y, targetSlot.z + 0.05), accentColor);
+          this.triggerWallFireworks(this.ceremonyTargetSlotIndex, 420, this.activeStrikeBadge.strikeDays);
+
+          if (this.soundEnabled) {
+            badgeAudio.playStrikeShockwaveSound();
+            badgeAudio.playStrikeUnlockFlourish();
+          }
+          this.triggerCameraShake(0.35);
+
+          // Flash light
+          this.snapFlashLight.position.set(targetSlot.x, targetSlot.y, targetSlot.z + 0.6);
+          this.snapFlashLight.color.set(this.activeStrikeBadge.accentHex);
+          this.snapFlashLight.intensity = 5.0;
+
+          // Hide vortex points
+          if (this.vortexPoints) this.vortexPoints.visible = false;
+        }
+
+        if (this.onCeremonyPhaseChange) {
+          this.onCeremonyPhaseChange('molten_burst', p);
+        }
+      }
+      // Phase 3: ✨ 浮空巡礼 (Hero Levitation & 3D 360° Inspection Orbit) -> 2300 ~ 4600ms
+      else if (ceremonyElapsed < 4600) {
+        const p = Math.min(1.0, (ceremonyElapsed - 2300) / 2300);
+        const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+
+        if (this.ceremonyPhase === 'molten_burst') {
+          this.ceremonyPhase = 'hero_levitate';
+
+          // Spawn floating pending badge mesh in center
+          if (!this.pendingBadgeMesh) {
+            const badgeMesh = buildAppleBadge3D(this.mats, this.activeStrikeBadge);
+            badgeMesh.name = `pending-${this.activeStrikeBadge.id}`;
+            this.pendingBadgeMesh = badgeMesh;
+            this.centerGroup.add(badgeMesh);
+          }
+        }
+
+        if (this.pendingBadgeMesh) {
+          // Ascend from slot coordinate to center stage
+          const currentX = slotPos.x * (1.0 - ease);
+          const currentY = slotPos.y * (1.0 - ease);
+          const currentZ = slotPos.z * (1.0 - ease) + Math.sin(ease * Math.PI) * 0.4;
+          this.pendingBadgeMesh.position.set(currentX, currentY, currentZ);
+
+          // Scale smoothly from 0.44 to 1.0
+          this.pendingBadgeMesh.scale.setScalar(0.44 + ease * 0.56);
+
+          // 360° showcase tumbling rotation
+          const yaw = ease * Math.PI * 2;
+          const tilt = Math.sin(ease * Math.PI) * 0.28;
+          const rotQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, yaw, 0, 'XYZ'));
+          this.pendingBadgeMesh.quaternion.copy(rotQuat);
+        }
+
+        // Camera pulls back smoothly to baseline
+        this.camera.position.x += (0 - this.camera.position.x) * dt * 4.0;
+        this.camera.position.y += (0 - this.camera.position.y) * dt * 4.0;
+        this.camera.position.z += (7.2 - this.camera.position.z) * dt * 4.0;
+
+        // Orbit particles shimmer
+        this.updateParticles(dt, now);
+
+        if (this.onCeremonyPhaseChange) {
+          this.onCeremonyPhaseChange('hero_levitate', p);
+        }
+      }
+      // Phase 4: 🏁 达成入列与自由赏玩
+      else {
+        this.isCeremonyActive = false;
+        this.ceremonyPhase = 'complete';
+        this.currentState = 'pending_float';
+        if (this.vortexPoints) this.vortexPoints.visible = false;
+        if (this.shockwaveMesh) this.shockwaveMesh.visible = false;
+        targetSlot.liftTarget = 0.0;
+
+        this.camera.position.set(0, 0, 7.2);
+        this.targetQuat.identity();
+        this.currentQuat.identity();
+
+        if (this.onCeremonyPhaseChange) {
+          this.onCeremonyPhaseChange('complete', 1.0);
+        }
+        if (this.onCeremonyComplete) {
+          this.onCeremonyComplete(this.activeStrikeBadge);
+        }
+        if (this.onStateChange) {
+          this.onStateChange('pending_float', this.activeStrikeBadge);
+        }
+      }
+    }
+
     // Update active scatter spark particles
     this.updateScatterSparks(dt);
 
     // Update active celebration fireworks particles
     this.updateFireworks(dt);
+
+    // Update expanding shockwave
+    this.updateShockwave(now);
 
     // ───────────────────────────────────────────────────────────────────────
     // Update Slots Breathing Halo & Golden Streaming Hover Glow

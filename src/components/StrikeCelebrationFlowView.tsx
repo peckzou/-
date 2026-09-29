@@ -33,6 +33,31 @@ import {
 } from 'lucide-react';
 import { badgeAudio, triggerHaptic } from '../utils/hapticsAndAudio';
 
+// Helper function for inspirational achievement slogans (鼓励性成就标语)
+export const getStrikeEncouragingSlogan = (strikeDays: number): string => {
+  if (strikeDays <= 3) {
+    return '好的开始是成功的一半！初燃之火已点亮，每一步坚持都在汇聚成不凡力量！';
+  } else if (strikeDays <= 7) {
+    return '完美整周全勤达成！在自律的轨道上稳健前行，耀日金冕见证你的卓越节律！';
+  } else if (strikeDays <= 14) {
+    return '连续两周打破惯性界限！自律已深入肌理，意志坚如磐石，习惯已然成自然！';
+  } else if (strikeDays <= 30) {
+    return '跨越一整个自然月！你用不竭的热情创造了属于你的运动神话，传奇由此开启！';
+  } else if (strikeDays <= 40) {
+    return '炽光破晓，动能永驻！40天的恒久专注正在深刻重塑你的身体与心灵形态！';
+  } else if (strikeDays <= 50) {
+    return '半百黄金里程碑！你已超越了99%的同行者，纯金意志在岁月中熠熠生辉！';
+  } else if (strikeDays <= 60) {
+    return '双月凌空，持之以恒的自律是最强大的引力场，浩瀚征程无可阻挡！';
+  } else if (strikeDays <= 80) {
+    return '极光拂晓，长达80天的奔跑见证了无与伦比的坚韧意志与全方位蜕变！';
+  } else if (strikeDays <= 90) {
+    return '季度宗师！一整季度的风雨无阻与自律积累，成就了不可撼动的卓越殿堂！';
+  } else {
+    return '百日破壁，量子跃迁！一百个全力以赴的日夜，跨越极限，致敬每一个不凡的自己！';
+  }
+};
+
 interface StrikeCelebrationFlowViewProps {
   onMetricsUpdate?: (m: PerformanceMetrics) => void;
   sharedMaterials: AppleAwardMaterials;
@@ -69,6 +94,18 @@ export const StrikeCelebrationFlowView: React.FC<StrikeCelebrationFlowViewProps>
 
   // Selected Slot Achievement Details Modal State (点击卡槽弹出的成就名称与获取日期详情)
   const [selectedSlotModal, setSelectedSlotModal] = useState<StrikeWallSlot | null>(null);
+
+  // Dedicated Celebratory Arrival Modal State (勋章完成抛物线入场并触发烟花后弹出的精致成就卡片)
+  const [arrivalCelebrationModal, setArrivalCelebrationModal] = useState<{
+    badge: StrikeBadgeItem;
+    earnedDate: string;
+    slogan: string;
+  } | null>(null);
+
+  // Strike Theme Badge Dedicated Unlock Ceremony State (Strike 专属解锁动画状态与阶段管线)
+  const [ceremonyPhase, setCeremonyPhase] = useState<'idle' | 'igniting' | 'molten_burst' | 'hero_levitate' | 'complete'>('idle');
+  const [ceremonyProgress, setCeremonyProgress] = useState<number>(0);
+  const [selectedCeremonyBadge, setSelectedCeremonyBadge] = useState<StrikeBadgeItem>(STRIKE_BADGE_CATALOG[0]);
 
   // Trigger calibrated Haptic Feedback API + Screen Micro-Shake
   const triggerCelebrationHapticAndShake = useCallback((type: 'unlock' | 'claim_launch' | 'snap') => {
@@ -129,6 +166,18 @@ export const StrikeCelebrationFlowView: React.FC<StrikeCelebrationFlowViewProps>
     scene.onClaimComplete = (badge) => {
       setClaimedBadgeIds((prev) => (prev.includes(badge.id) ? prev : [...prev, badge.id]));
       triggerCelebrationHapticAndShake('snap');
+
+      // Pop up the refined achievement arrival card after 400ms for fireworks flare
+      setTimeout(() => {
+        setArrivalCelebrationModal({
+          badge,
+          earnedDate: badge.earnedDate || 'OCTOBER 29, 2026',
+          slogan: getStrikeEncouragingSlogan(badge.strikeDays),
+        });
+        if (soundEnabled) {
+          badgeAudio.playStrikeUnlockFlourish();
+        }
+      }, 450);
     };
 
     scene.onSlotClick = (slot) => {
@@ -268,6 +317,44 @@ export const StrikeCelebrationFlowView: React.FC<StrikeCelebrationFlowViewProps>
           sceneRef.current.triggerClaimToWall();
         }
       }, 1500);
+    }
+  };
+
+  /**
+   * Action: Trigger Strike Theme Badge Unlock Ceremony (多阶段沉浸式解锁动画)
+   */
+  const handleStartStrikeUnlockCeremony = (badgeItem?: StrikeBadgeItem) => {
+    const targetBadge = badgeItem || selectedCeremonyBadge || STRIKE_BADGE_CATALOG[0];
+    setSelectedCeremonyBadge(targetBadge);
+    setActiveBadge(targetBadge);
+    setBannerMilestone(targetBadge);
+
+    // Reset this badge claim status in wall to showcase metamorphosis
+    setClaimedBadgeIds((prev) => prev.filter((id) => id !== targetBadge.id));
+
+    if (sceneRef.current) {
+      sceneRef.current.startStrikeUnlockCeremony(
+        targetBadge,
+        (phase, prog) => {
+          setCeremonyPhase(phase);
+          setCeremonyProgress(prog);
+        },
+        (unlockedBadge) => {
+          setClaimedBadgeIds((prev) => (prev.includes(unlockedBadge.id) ? prev : [...prev, unlockedBadge.id]));
+          triggerCelebrationHapticAndShake('snap');
+        }
+      );
+    }
+  };
+
+  /**
+   * Action: Cancel ongoing ceremony
+   */
+  const handleCancelCeremony = () => {
+    setCeremonyPhase('idle');
+    setCeremonyProgress(0);
+    if (sceneRef.current) {
+      sceneRef.current.cancelCeremony();
     }
   };
 
@@ -627,144 +714,269 @@ export const StrikeCelebrationFlowView: React.FC<StrikeCelebrationFlowViewProps>
         </div>
       </div>
 
-      {/* 3天 & 7天 成就触发条件与抛物线入场动画模拟测试面板 (Dedicated Simulator & Testing Panel) */}
-      <div className="bg-gradient-to-r from-[#121620]/95 via-[#1a1c29]/95 to-[#121620]/95 border-2 border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-2xl backdrop-blur-xl flex flex-col gap-3.5 relative overflow-hidden">
-        {/* Ambient Top Glow */}
-        <div className="absolute top-0 right-1/4 w-96 h-16 bg-amber-400/15 rounded-full blur-2xl pointer-events-none" />
+      {/* Strike 主题 Badge 专属沉浸式解锁动画控制台 (Dedicated Strike Unlock Animation Ceremony Studio) */}
+      <div className="bg-gradient-to-r from-[#17142b]/95 via-[#1e1738]/95 to-[#121620]/95 border-2 border-orange-500/50 rounded-2xl p-4 sm:p-5 shadow-2xl backdrop-blur-xl flex flex-col gap-4 relative overflow-hidden">
+        {/* Ambient Top Fiery Glow */}
+        <div className="absolute -top-10 left-1/3 w-80 h-28 bg-orange-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute right-0 bottom-0 w-64 h-32 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Panel Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 z-10">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-black font-black shadow-md shadow-orange-500/30">
-              <Sparkles className="w-4 h-4" />
+        {/* Console Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-600 via-amber-500 to-yellow-400 flex items-center justify-center text-black font-black shadow-lg shadow-orange-500/30 shrink-0">
+              <Flame className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
-                  3天 &amp; 7天 成就触发与抛物线入场测试台
+                  Strike 主题勋章专属解锁动画 (Streak Badge Unlock Ceremony)
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold border border-amber-400/40">
-                  自动解锁 · 悬浮待领 · 抛物线磁吸入墙
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 font-bold border border-orange-500/40 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping" />
+                  4 阶段沉浸式仪式
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                模拟达成连击条件，测试 3D 浮雕勋章自动解锁、悬浮待领取与抛物线磁吸入场动画（Spring 阻尼过冲归位）
+                烈焰旋涡聚能 $\to$ 熔金破茧冲击波 $\to$ 浮空 360° 巡礼 $\to$ 抛物线磁吸入墙
               </p>
             </div>
           </div>
 
-          {/* Current State Status Pill */}
+          {/* Current Animation Phase Pill */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[11px] font-mono text-slate-400">当前阶段:</span>
-            <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-xl bg-black/40 border border-white/15 text-amber-300">
-              {spatialState === 'pending_float'
-                ? `🔥 待领取: ${activeBadge.name}`
-                : spatialState === 'flying_to_wall'
-                ? '🚀 抛物线飞入中...'
-                : spatialState === 'magnetic_snap'
-                ? '⚡ 磁吸入墙归位'
-                : '🏛️ 勋章墙全览'}
+            <span className="text-[11px] font-mono text-slate-400">仪式状态:</span>
+            <span
+              className={`text-xs font-mono font-bold px-3 py-1.5 rounded-xl border flex items-center gap-1.5 ${
+                spatialState === 'unlock_ceremony'
+                  ? ceremonyPhase === 'igniting'
+                    ? 'bg-orange-500/25 border-orange-400/60 text-orange-300 animate-pulse'
+                    : ceremonyPhase === 'molten_burst'
+                    ? 'bg-amber-400/30 border-amber-300 text-amber-200 animate-bounce'
+                    : ceremonyPhase === 'hero_levitate'
+                    ? 'bg-purple-500/25 border-purple-400 text-purple-200'
+                    : 'bg-emerald-500/25 border-emerald-400 text-emerald-300'
+                  : 'bg-black/40 border-white/15 text-slate-300'
+              }`}
+            >
+              {spatialState === 'unlock_ceremony' ? (
+                <>
+                  <Flame className="w-3.5 h-3.5 text-amber-400" />
+                  <span>
+                    {ceremonyPhase === 'igniting'
+                      ? '🌋 阶段一: 烈焰聚能中...'
+                      : ceremonyPhase === 'molten_burst'
+                      ? '💥 阶段二: 熔金破茧爆发!'
+                      : ceremonyPhase === 'hero_levitate'
+                      ? '✨ 阶段三: 浮空 360° 巡礼'
+                      : '🏁 仪式完成 / 就绪赏玩'}
+                  </span>
+                </>
+              ) : spatialState === 'pending_float' ? (
+                '🔥 待领取 (3D 悬浮)'
+              ) : spatialState === 'flying_to_wall' ? (
+                '🚀 抛物线自转飞入'
+              ) : spatialState === 'magnetic_snap' ? (
+                '⚡ 磁吸弹性归位'
+              ) : (
+                '🏛️ 勋章墙就绪'
+              )}
             </span>
           </div>
         </div>
 
-        {/* Core Testing Buttons Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 z-10 pt-1">
-          {/* Button 1: 模拟 3 天成就达成 */}
-          <button
-            onClick={() => handleSimulate3DayUnlock(false)}
-            className="p-3 rounded-xl bg-gradient-to-r from-orange-500/20 to-amber-500/15 hover:from-orange-500/30 hover:to-amber-500/25 border border-orange-500/50 hover:border-orange-400 text-left transition-all active:scale-[0.98] group cursor-pointer shadow-md hover:shadow-orange-500/10 flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-orange-300 group-hover:text-orange-200">
-                <Flame className="w-4 h-4 text-orange-400 animate-pulse" />
-                <span>模拟 3 天成就达成</span>
-              </div>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30">
-                初燃之焰
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300">
-              达成 3 天全勤，自动触发解锁横幅、喷泉光效与音效，进入 3D 悬浮待领取
-            </p>
-          </button>
+        {/* Milestone Badge Target Quick Selector */}
+        <div className="z-10 flex flex-col gap-2 bg-black/40 backdrop-blur-md p-3 rounded-2xl border border-white/10">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-300 font-bold flex items-center gap-1.5">
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <span>选择解锁目标里程碑勋章:</span>
+            </span>
+            <span className="text-[11px] font-mono text-amber-300 font-bold">
+              {selectedCeremonyBadge.name}
+            </span>
+          </div>
 
-          {/* Button 2: 模拟 7 天成就达成 */}
-          <button
-            onClick={() => handleSimulate7DayUnlock(false)}
-            className="p-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/15 hover:from-amber-500/30 hover:to-yellow-500/25 border border-amber-500/50 hover:border-amber-400 text-left transition-all active:scale-[0.98] group cursor-pointer shadow-md hover:shadow-amber-500/10 flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-amber-300 group-hover:text-amber-200">
-                <Crown className="w-4 h-4 text-amber-400 animate-pulse" />
-                <span>模拟 7 天成就达成</span>
-              </div>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
-                整周全勤 (1 WEEKS)
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300">
-              达成 7 天完美整周，触发「耀日之冠」冠冕光效与音效，进入 3D 悬浮待领取
-            </p>
-          </button>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+            {STRIKE_BADGE_CATALOG.slice(0, 6).map((item) => {
+              const isSelected = selectedCeremonyBadge.id === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setSelectedCeremonyBadge(item);
+                    if (soundEnabled) badgeAudio.playStrikeDayCheckin(item.strikeDays);
+                    triggerHaptic('selection');
+                  }}
+                  className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-orange-500/30 to-amber-500/20 border-orange-400 text-white shadow-md shadow-orange-500/20'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <div className="shrink-0">
+                    <StrikeFlameBadgeIcon
+                      number={item.displayNumber}
+                      unit={item.displayUnit}
+                      size={28}
+                      isShadow={false}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold block truncate">{item.displayNumber} {item.displayUnit}</span>
+                    <span className="text-[9px] text-slate-400 font-mono block truncate">{item.strikeDays} 天达成</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-          {/* Button 3: 测试抛物线入场入墙动画 */}
-          <button
-            onClick={handleClaimToWall}
-            disabled={spatialState !== 'pending_float'}
-            className={`p-3 rounded-xl border text-left transition-all active:scale-[0.98] flex flex-col justify-between ${
-              spatialState === 'pending_float'
-                ? 'bg-gradient-to-r from-[#00f0ff]/20 to-emerald-500/20 hover:from-[#00f0ff]/30 hover:to-emerald-500/30 border-[#00f0ff]/60 hover:border-[#00f0ff] cursor-pointer shadow-lg shadow-[#00f0ff]/10 group'
-                : 'bg-white/5 border-white/10 text-slate-500 opacity-60 cursor-not-allowed'
+        {/* 4-Stage Choreography Stepper Banner */}
+        <div className="z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {/* Step 1 */}
+          <div
+            className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between ${
+              spatialState === 'unlock_ceremony' && ceremonyPhase === 'igniting'
+                ? 'bg-orange-500/25 border-orange-400 shadow-md shadow-orange-500/20'
+                : 'bg-white/5 border-white/10 opacity-80'
             }`}
           >
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-[#00f0ff] group-hover:text-cyan-200">
-                <FastForward className="w-4 h-4 text-[#00f0ff]" />
-                <span>测试抛物线入场入墙</span>
-              </div>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#00f0ff]/20 text-[#00f0ff] font-bold border border-[#00f0ff]/30">
-                {spatialState === 'pending_float' ? '就绪可飞' : '需先待领'}
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-orange-300 flex items-center gap-1">
+                <Flame className="w-3.5 h-3.5 text-orange-400" />
+                01. 烈焰聚能 (Vortex)
               </span>
+              <span className="text-[9px] font-mono text-slate-400">0 ~ 1.3s</span>
             </div>
-            <p className="text-[11px] text-slate-300">
-              3D 抛物线自转腾空 $\to$ 俯冲入墙 $\to$ 磁吸弹簧 Overshoot 振颤点亮灰色阴影卡槽
+            <p className="text-[10px] text-slate-300">
+              450 粒子漩涡向卡槽疾速内聚，低频熔火轰鸣蓄力
             </p>
-          </button>
+          </div>
+
+          {/* Step 2 */}
+          <div
+            className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between ${
+              spatialState === 'unlock_ceremony' && ceremonyPhase === 'molten_burst'
+                ? 'bg-amber-500/25 border-amber-400 shadow-md shadow-amber-500/20'
+                : 'bg-white/5 border-white/10 opacity-80'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                02. 熔金破茧 (Burst)
+              </span>
+              <span className="text-[9px] font-mono text-slate-400">1.3 ~ 2.3s</span>
+            </div>
+            <p className="text-[10px] text-slate-300">
+              灰影瞬间熔铸 24K 金胚，冲击波与 4 阶烟花炸裂
+            </p>
+          </div>
+
+          {/* Step 3 */}
+          <div
+            className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between ${
+              spatialState === 'unlock_ceremony' && ceremonyPhase === 'hero_levitate'
+                ? 'bg-purple-500/25 border-purple-400 shadow-md shadow-purple-500/20'
+                : 'bg-white/5 border-white/10 opacity-80'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1">
+                <Award className="w-3.5 h-3.5 text-purple-400" />
+                03. 浮空巡礼 (Levitate)
+              </span>
+              <span className="text-[9px] font-mono text-slate-400">2.3 ~ 4.6s</span>
+            </div>
+            <p className="text-[10px] text-slate-300">
+              金勋章升腾至中央舞台，360° 自转巡礼全景光泽
+            </p>
+          </div>
+
+          {/* Step 4 */}
+          <div
+            className={`p-2.5 rounded-xl border transition-all flex flex-col justify-between ${
+              spatialState === 'flying_to_wall' || spatialState === 'magnetic_snap'
+                ? 'bg-cyan-500/25 border-cyan-400 shadow-md shadow-cyan-500/20'
+                : 'bg-white/5 border-white/10 opacity-80'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-cyan-300 flex items-center gap-1">
+                <FastForward className="w-3.5 h-3.5 text-cyan-400" />
+                04. 磁吸归位 (Snap)
+              </span>
+              <span className="text-[9px] font-mono text-slate-400">交互触发</span>
+            </div>
+            <p className="text-[10px] text-slate-300">
+              抛物线自转飞回 Strike 墙面，Spring 弹性吸附归位
+            </p>
+          </div>
         </div>
 
-        {/* Quick Full-Flow Demonstration & Environment Reset Actions */}
-        <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-slate-400 font-bold flex items-center gap-1">
-              <Play className="w-3 h-3 text-emerald-400" />
-              一键全流程自动演示:
-            </span>
+        {/* Primary Action Buttons */}
+        <div className="z-10 flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 border-t border-white/10">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            {/* Main Trigger Button */}
             <button
-              onClick={() => handleSimulate3DayUnlock(true)}
-              className="px-3 py-1.5 rounded-lg bg-orange-500/20 hover:bg-orange-500/35 border border-orange-500/40 text-orange-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-sm"
+              onClick={() => handleStartStrikeUnlockCeremony()}
+              disabled={spatialState === 'unlock_ceremony'}
+              className={`px-5 py-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
+                spatialState === 'unlock_ceremony'
+                  ? 'bg-white/10 text-slate-400 border border-white/15 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-400 text-black shadow-orange-500/30 hover:brightness-110 active:scale-95'
+              }`}
+            >
+              <Flame className="w-4 h-4 text-black animate-pulse" />
+              <span>🔥 启动 Strike 专属解锁动画 (Start Unlock Ceremony)</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            {/* Quick 3-Day & 7-Day Shortcuts */}
+            <button
+              onClick={() => handleStartStrikeUnlockCeremony(STRIKE_BADGE_CATALOG[0])}
+              className="px-3 py-2 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/40 text-orange-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
             >
               <Flame className="w-3.5 h-3.5 text-orange-400" />
-              <span>3天全流程 (达成 $\to$ 悬浮 $\to$ 自动飞入卡槽)</span>
+              <span>3天初燃</span>
             </button>
+
             <button
-              onClick={() => handleSimulate7DayUnlock(true)}
-              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/40 text-amber-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-sm"
+              onClick={() => handleStartStrikeUnlockCeremony(STRIKE_BADGE_CATALOG[1])}
+              className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
             >
               <Crown className="w-3.5 h-3.5 text-amber-400" />
-              <span>7天全流程 (整周 $\to$ 悬浮 $\to$ 自动飞入卡槽)</span>
+              <span>7天整周</span>
+            </button>
+
+            <button
+              onClick={() => handleStartStrikeUnlockCeremony(STRIKE_BADGE_CATALOG[9])}
+              className="px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+              <span>100天百日殿堂</span>
             </button>
           </div>
 
-          {/* Reset button to clear slots back to shadow */}
-          <button
-            onClick={handleReset}
-            className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-red-500/20 border border-white/15 hover:border-red-500/40 text-slate-300 hover:text-red-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ml-auto"
-            title="清空已入墙记录，将所有 10 个卡槽重置为未解锁灰色阴影状态"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>重置所有卡槽为灰色阴影</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            {spatialState === 'unlock_ceremony' && (
+              <button
+                onClick={handleCancelCeremony}
+                className="px-3 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 text-xs font-bold transition-all active:scale-95"
+              >
+                中止动画
+              </button>
+            )}
+
+            <button
+              onClick={handleReset}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-red-500/20 border border-white/15 hover:border-red-500/40 text-slate-300 hover:text-red-200 text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5"
+              title="重置所有卡槽为灰色阴影"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>重置卡槽为灰影</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -779,6 +991,47 @@ export const StrikeCelebrationFlowView: React.FC<StrikeCelebrationFlowViewProps>
         }`}
       >
         <div ref={containerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+
+        {/* Unlock Ceremony In-Viewport Live Cinematic HUD (沉浸式解锁仪式视口浮层) */}
+        {spatialState === 'unlock_ceremony' && (
+          <div className="absolute top-5 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 bg-[#121620]/90 backdrop-blur-2xl border border-orange-500/50 rounded-2xl p-3.5 sm:px-6 shadow-2xl z-20 flex flex-col items-center gap-2 max-w-lg w-full animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-400 flex items-center justify-center text-black font-black shadow-md shadow-orange-500/30">
+                  <Flame className="w-4 h-4 animate-bounce" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs sm:text-sm font-bold text-white tracking-tight">
+                      {ceremonyPhase === 'igniting'
+                        ? '🌋 阶段 1/3: 烈焰旋涡聚能 (Ignition)'
+                        : ceremonyPhase === 'molten_burst'
+                        ? '💥 阶段 2/3: 熔金破茧爆发 (Molten Burst)'
+                        : ceremonyPhase === 'hero_levitate'
+                        ? '✨ 阶段 3/3: 浮空 360° 巡礼 (Hero Orbit)'
+                        : '🏁 仪式完成 / 已就绪'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-amber-300 font-mono font-medium block">
+                    {selectedCeremonyBadge.name} · {selectedCeremonyBadge.strikeDays} 天连击勋章
+                  </span>
+                </div>
+              </div>
+
+              <span className="text-xs font-mono font-black text-amber-400">
+                {Math.round(ceremonyProgress * 100)}%
+              </span>
+            </div>
+
+            {/* Live progress ribbon */}
+            <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 transition-all duration-100 rounded-full"
+                style={{ width: `${Math.max(5, ceremonyProgress * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Floating Pending State Badge Claim Bar (悬浮待领取) */}
         {spatialState === 'pending_float' && (
@@ -980,6 +1233,137 @@ export const StrikeCelebrationFlowView: React.FC<StrikeCelebrationFlowViewProps>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Parabolic Arrival Celebration Achievement Card Modal (勋章完成抛物线入场并触发烟花后弹出的精致成就卡片) */}
+        {arrivalCelebrationModal && (
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-2xl z-40 flex items-center justify-center p-4 sm:p-6 animate-in fade-in zoom-in-95 duration-300">
+            {/* Ambient Dynamic Background Glow */}
+            <div
+              className="absolute w-80 h-80 rounded-full blur-3xl opacity-35 pointer-events-none animate-pulse"
+              style={{ backgroundColor: arrivalCelebrationModal.badge.accentHex || '#ff9500' }}
+            />
+
+            <div className="bg-gradient-to-b from-[#141926]/98 via-[#0e121d]/98 to-[#0a0d14]/98 border-2 border-amber-400/50 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl shadow-black/95 flex flex-col gap-4 relative z-10 animate-in slide-in-from-bottom-6 duration-300">
+              {/* Close 'X' Button */}
+              <button
+                onClick={() => setArrivalCelebrationModal(null)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer border border-white/10 shadow-sm"
+                title="关闭"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Top Medal Icon & Celebration Badge Header */}
+              <div className="flex flex-col items-center text-center gap-3 pt-1">
+                {/* 3D Glowing Medallion Replica with Pulsing Halo */}
+                <div className="relative group cursor-pointer">
+                  <div className="absolute -inset-3 bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 rounded-full blur-xl opacity-70 group-hover:opacity-100 transition-all animate-pulse" />
+                  <div className="relative">
+                    <StrikeFlameBadgeIcon
+                      number={arrivalCelebrationModal.badge.displayNumber}
+                      unit={arrivalCelebrationModal.badge.displayUnit}
+                      size={74}
+                      isShadow={false}
+                      hasGlow={true}
+                      shimmer={true}
+                    />
+                  </div>
+                </div>
+
+                {/* Triumphant Header Pill */}
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-orange-500/25 via-amber-500/20 to-yellow-500/25 border border-amber-400/50 text-amber-300 font-extrabold text-xs tracking-wider uppercase shadow-md">
+                  <Flame className="w-3.5 h-3.5 text-orange-400 animate-bounce" />
+                  <span>STRIKE 勋章已荣耀入墙归位</span>
+                </div>
+
+                {/* Achievement Name */}
+                <div className="space-y-1">
+                  <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                    {arrivalCelebrationModal.badge.name}
+                  </h3>
+                  <span className="text-xs font-mono font-bold text-amber-400 block">
+                    {arrivalCelebrationModal.badge.badgeStyle} · {arrivalCelebrationModal.badge.category}
+                  </span>
+                </div>
+              </div>
+
+              {/* Milestone & Earned Date Section */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col justify-between">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-medium mb-1">
+                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>达成日期 (Earned Date)</span>
+                  </div>
+                  <span className="text-xs sm:text-sm font-bold text-white font-mono block">
+                    {arrivalCelebrationModal.earnedDate}
+                  </span>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col justify-between">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-medium mb-1">
+                    <Crown className="w-3.5 h-3.5 text-amber-400" />
+                    <span>连续达成目标</span>
+                  </div>
+                  <span className="text-xs sm:text-sm font-bold text-amber-300 font-mono block">
+                    连续打卡 {arrivalCelebrationModal.badge.strikeDays} 天
+                  </span>
+                </div>
+              </div>
+
+              {/* Encouraging Slogan Callout Box (鼓励性成就标语) */}
+              <div className="bg-gradient-to-r from-orange-500/15 via-amber-500/10 to-yellow-500/15 rounded-2xl p-4 border border-amber-400/30 relative overflow-hidden shadow-inner">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center shrink-0 mt-0.5 text-black shadow-md shadow-orange-500/20">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block">
+                      鼓励成就寄语 (Inspirational Slogan)
+                    </span>
+                    <p className="text-xs sm:text-sm font-semibold text-amber-100 leading-relaxed italic">
+                      “{arrivalCelebrationModal.slogan}”
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description & Verified Stats */}
+              <div className="bg-white/[0.04] rounded-2xl p-3 border border-white/10 space-y-1.5 text-xs">
+                <p className="text-slate-300 leading-relaxed font-normal">
+                  {arrivalCelebrationModal.badge.longDescription || arrivalCelebrationModal.badge.description}
+                </p>
+                <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span>官方数据认证:</span>
+                  <span className="text-slate-200 font-bold">{arrivalCelebrationModal.badge.stats}</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-1">
+                <button
+                  onClick={() => setArrivalCelebrationModal(null)}
+                  className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold transition-all active:scale-95 cursor-pointer border border-white/15"
+                >
+                  关闭
+                </button>
+                <button
+                  onClick={() => {
+                    const slotIdx = STRIKE_BADGE_CATALOG.findIndex((b) => b.id === arrivalCelebrationModal.badge.id);
+                    if (sceneRef.current && slotIdx !== -1) {
+                      sceneRef.current.selectSlotForInspect(slotIdx);
+                    }
+                    setArrivalCelebrationModal(null);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-black font-extrabold text-xs shadow-lg shadow-orange-500/25 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>调入中央 3D 赏玩与 180° 翻面</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           </div>

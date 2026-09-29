@@ -81,6 +81,92 @@ class BadgeAudioEngine {
     } catch {}
   }
 
+  // Strike ignition & vortex power-up audio (volcanic rumble + rising energy shimmer)
+  playStrikeIgnitionSound() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+      const dur = 1.1;
+
+      // Low volcanic rumble
+      const sub = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      sub.type = 'sawtooth';
+      sub.frequency.setValueAtTime(55, t);
+      sub.frequency.exponentialRampToValueAtTime(140, t + dur);
+      subGain.gain.setValueAtTime(0.01, t);
+      subGain.gain.linearRampToValueAtTime(0.14, t + dur * 0.7);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(120, t);
+      filter.frequency.exponentialRampToValueAtTime(600, t + dur);
+
+      sub.connect(filter);
+      filter.connect(subGain);
+      subGain.connect(this.ctx.destination);
+      sub.start(t);
+      sub.stop(t + dur);
+
+      // Shimmering harmonic overtone
+      const chime = this.ctx.createOscillator();
+      const chimeGain = this.ctx.createGain();
+      chime.type = 'sine';
+      chime.frequency.setValueAtTime(440, t + 0.3);
+      chime.frequency.exponentialRampToValueAtTime(880, t + dur);
+      chimeGain.gain.setValueAtTime(0.001, t + 0.3);
+      chimeGain.gain.linearRampToValueAtTime(0.08, t + dur * 0.8);
+      chimeGain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+      chime.connect(chimeGain);
+      chimeGain.connect(this.ctx.destination);
+      chime.start(t + 0.3);
+      chime.stop(t + dur);
+    } catch {}
+  }
+
+  // Strike molten transformation shockwave audio
+  playStrikeShockwaveSound() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime;
+
+      // Punchy impact transient
+      const impact = this.ctx.createOscillator();
+      const impactGain = this.ctx.createGain();
+      impact.type = 'sine';
+      impact.frequency.setValueAtTime(180, t);
+      impact.frequency.exponentialRampToValueAtTime(40, t + 0.3);
+      impactGain.gain.setValueAtTime(0.25, t);
+      impactGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+      impact.connect(impactGain);
+      impactGain.connect(this.ctx.destination);
+      impact.start(t);
+      impact.stop(t + 0.36);
+
+      // Resonant crystal brass ring
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((freq, i) => {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t + i * 0.03);
+        g.gain.setValueAtTime(0.001, t + i * 0.03);
+        g.gain.linearRampToValueAtTime(0.1, t + i * 0.03 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.03 + 0.9);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start(t + i * 0.03);
+        osc.stop(t + i * 0.03 + 0.95);
+      });
+    } catch {}
+  }
+
   // Strike day check-in +1 audio tick with progressive pitch
   playStrikeDayCheckin(dayIndex = 1) {
     try {
