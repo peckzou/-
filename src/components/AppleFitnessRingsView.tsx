@@ -129,7 +129,7 @@ export const AppleFitnessRingsView: React.FC<AppleFitnessRingsViewProps> = ({
   const areAllClosed = displayPct.every((p) => p >= 100);
 
   // 3D Spatial Self-Rotation States
-  const [isSpinning, setIsSpinning] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(true);
   const [spinSpeed, setSpinSpeed] = useState<Rings3DSpinSpeed>('turbo');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [motionBlurEnabled, setMotionBlurEnabled] = useState(true);
@@ -183,6 +183,9 @@ export const AppleFitnessRingsView: React.FC<AppleFitnessRingsViewProps> = ({
     scene3d.flowFieldEnabled = flowFieldEnabled;
     scene3d.flowFieldIntensity = flowFieldIntensity;
     scene3d.brakeSparksEnabled = brakeSparksEnabled;
+    scene3d.onTapRing = () => {
+      handleRingExit();
+    };
     scene3d.updateRingPercentages(displayPct[0], displayPct[1], displayPct[2], isClosingAnim);
 
     scene3DRef.current = scene3d;
@@ -236,6 +239,59 @@ export const AppleFitnessRingsView: React.FC<AppleFitnessRingsViewProps> = ({
     },
     [soundEnabled]
   );
+
+  const prevClosedRingsRef = useRef<[boolean, boolean, boolean]>([false, false, false]);
+  const prevAllClosedRef = useRef<boolean>(false);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 1.5 Reactive 3-Ring Closure Status Detection & Instant Fireworks Eruption
+  // 检测三环闭合状态：满足条件即刻调用烟花粒子发射函数，并施加闭合瞬间环体高亮效果
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const isClosed0 = displayPct[0] >= 100;
+    const isClosed1 = displayPct[1] >= 100;
+    const isClosed2 = displayPct[2] >= 100;
+    const isAllClosedNow = isClosed0 && isClosed1 && isClosed2;
+
+    // Detect individual ring closure moments & trigger ring highlight glow + tip sparks
+    if (isClosed0 && !prevClosedRingsRef.current[0]) {
+      scene3DRef.current?.triggerRingHighlightGlow(0);
+      scene3DRef.current?.spawnRingTipSparks(0, 280);
+      if (soundEnabled) badgeAudio.playRingCloseSound(0);
+      triggerHaptic('impact');
+    }
+    if (isClosed1 && !prevClosedRingsRef.current[1]) {
+      scene3DRef.current?.triggerRingHighlightGlow(1);
+      scene3DRef.current?.spawnRingTipSparks(1, 280);
+      if (soundEnabled) badgeAudio.playRingCloseSound(1);
+      triggerHaptic('impact');
+    }
+    if (isClosed2 && !prevClosedRingsRef.current[2]) {
+      scene3DRef.current?.triggerRingHighlightGlow(2);
+      scene3DRef.current?.spawnRingTipSparks(2, 280);
+      if (soundEnabled) badgeAudio.playRingCloseSound(2);
+      triggerHaptic('impact');
+    }
+
+    // Master 3-Ring Full Closure Condition Met!
+    if (isAllClosedNow && !prevAllClosedRef.current) {
+      // 1. Immediately invoke firework particle emission
+      triggerInstancedSparks(2400);
+
+      // 2. Trigger ring body highlight glow effect on all 3 rings
+      scene3DRef.current?.triggerRingHighlightGlow(-1);
+
+      // 3. Play master audio flourish & success haptic feedback
+      if (soundEnabled) {
+        badgeAudio.playAllRingsMasterFlourish();
+        badgeAudio.playBurst();
+      }
+      triggerHaptic('success');
+    }
+
+    prevClosedRingsRef.current = [isClosed0, isClosed1, isClosed2];
+    prevAllClosedRef.current = isAllClosedNow;
+  }, [displayPct, soundEnabled, triggerInstancedSparks]);
 
   // Trigger Racing Carbon-Ceramic Brake Sparks ("赛车刹车铁火花")
   const triggerRacingBrakeSparks = useCallback(
@@ -314,31 +370,26 @@ export const AppleFitnessRingsView: React.FC<AppleFitnessRingsViewProps> = ({
         setIsClosingAnim(false);
 
         // ─────────────────────────────────────────────────────────────────
-        // 阶段 2: 喷发 2,200+ 熔铁铁花暴烈爆发 (650ms flat)
+        // 同步触发 3D 高速自转与 360° 持续烟花喷发 (零延迟)
         // ─────────────────────────────────────────────────────────────────
-        setCelebrationStage('erupting');
+        setCelebrationStage('spinning');
+        setIsSpinning(true);
         if (scene3DRef.current) {
           scene3DRef.current.triggerStagedClosureCelebration();
         }
-
-        // ─────────────────────────────────────────────────────────────────
-        // 阶段 3: 650ms 后加速进入 3D 空间持续自转与离心火花 (片尾成就卡片去掉，改为持续自转)
-        // ─────────────────────────────────────────────────────────────────
-        const tSpin = setTimeout(() => {
-          setCelebrationStage('spinning');
-          setIsSpinning(true);
-          if (soundEnabled) {
-            badgeAudio.playTurbineAcceleration();
-            badgeAudio.playSpinWhoosh(1.4);
-          }
-        }, 650);
-
-        stageTimersRef.current.push(tSpin);
       }
     };
 
     requestAnimationFrame(animateClosure);
   }, [targetPct, soundEnabled]);
+
+  // Auto-trigger 3-ring completion fireworks celebration automatically on mount without clicking any switch!
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      triggerFullClosureCelebration();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [triggerFullClosureCelebration]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 4. Quick Jump: 片头常驻 (Head) 与 片尾持续自转 (Continuous Spin)
@@ -375,16 +426,20 @@ export const AppleFitnessRingsView: React.FC<AppleFitnessRingsViewProps> = ({
     triggerHaptic('success');
   }, [soundEnabled]);
 
-  // 点击三环就退出自转态，平滑回归片头常驻就绪态
+  // 点击三环就退出自转态，平滑减速降速归零至静止状态
   const handleRingExit = useCallback(() => {
     if (celebrationStage === 'spinning' || isSpinning || celebrationStage === 'erupting') {
-      jumpToHeadStandby();
-      if (soundEnabled) {
-        badgeAudio.playClick(1.2);
+      if (scene3DRef.current) {
+        scene3DRef.current.startSmoothDecelerationExit(() => {
+          setIsSpinning(false);
+          setCelebrationStage('head');
+          setDisplayPct([85, 90, 75]);
+        });
+      } else {
+        jumpToHeadStandby();
       }
-      triggerHaptic('tap');
     }
-  }, [celebrationStage, isSpinning, jumpToHeadStandby, soundEnabled]);
+  }, [celebrationStage, isSpinning, jumpToHeadStandby]);
 
   // Handle single ring slider change
   const handleRingValueChange = (index: number, val: number) => {
@@ -609,9 +664,13 @@ scene.settleToRestingTailState();`;
                 if (pointerDownPosRef.current) {
                   const dist = Math.hypot(e.clientX - pointerDownPosRef.current.x, e.clientY - pointerDownPosRef.current.y);
                   const duration = Date.now() - pointerDownPosRef.current.time;
-                  // If it was a quick tap/click on ring (not an orbit drag), exit celebration
+                  // If it was a quick tap/click on ring (not an orbit drag)
                   if (dist < 8 && duration < 500) {
-                    handleRingExit();
+                    if (celebrationStage === 'spinning') {
+                      handleRingExit();
+                    } else if (celebrationStage === 'head' || celebrationStage === 'tail') {
+                      triggerFullClosureCelebration();
+                    }
                   }
                 }
               }}
